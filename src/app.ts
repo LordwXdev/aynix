@@ -2,8 +2,10 @@ import "dotenv/config";
 import express from "express";
 import { userRoutes } from "./modules/user/user.routes.js";
 
+
 const app = express();
 const PORT = 3000;
+
 
 app.use(express.json());
 
