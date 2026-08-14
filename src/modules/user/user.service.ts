@@ -52,4 +52,15 @@ export const userService = {
     const { passwordHash: _, ...safeUser } = user;
     return { user: safeUser, token };
   },
+
+  // get a user's own profile by their id
+  getProfile: async (userId: string) => {
+    const user = await userRepository.findById(userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    const { passwordHash: _, ...safeUser } = user;
+    return safeUser;
+  },
 };

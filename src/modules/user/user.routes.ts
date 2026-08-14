@@ -1,10 +1,12 @@
 import { Router } from "express";
 import { userController } from "./user.controller.js";
+import { requireAuth } from "../../shared/middleware/auth.js";
 
 export const userRoutes = Router();
 
-// POST /api/users/register  ->  create a new user
+// public routes, no token needed
 userRoutes.post("/register", userController.register);
-
-// POST /api/users/login  ->  log in and get a token
 userRoutes.post("/login", userController.login);
+
+// protected route, token required
+userRoutes.get("/me", requireAuth, userController.getProfile);

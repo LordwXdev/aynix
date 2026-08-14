@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
 import { userService } from "./user.service.js";
+import { AuthRequest } from "../../shared/middleware/auth.js";
 
 export const userController = {
-  // handle a signup request
   register: async (req: Request, res: Response) => {
     try {
       const { name, phone, password, email } = req.body;
@@ -25,7 +25,6 @@ export const userController = {
     }
   },
 
-  // handle a login request
   login: async (req: Request, res: Response) => {
     try {
       const { phone, password } = req.body;
@@ -46,6 +45,24 @@ export const userController = {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Something went wrong";
       return res.status(401).json({ error: message });
+    }
+  },
+
+  // get the logged-in user's own profile
+  getProfile: async (req: AuthRequest, res: Response) => {
+    try {
+      // req.user was set by the auth gatekeeper
+      const userId = req.user?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+
+      const user = await userService.getProfile(userId);
+
+      return res.status(200).json({ user });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Something went wrong";
+      return res.status(404).json({ error: message });
     }
   },
 };
