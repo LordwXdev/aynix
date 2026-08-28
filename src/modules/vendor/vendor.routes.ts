@@ -4,10 +4,8 @@ import { requireAuth } from "../../shared/middleware/auth.js";
 
 export const vendorRoutes = Router();
 
-// both routes need a logged-in user, so requireAuth guards both
-userRoutesGuard();
+// POST /api/vendors  ->  create a store (must be logged in)
+vendorRoutes.post("/", requireAuth, vendorController.createStore);
 
-function userRoutesGuard() {
-  vendorRoutes.post("/", requireAuth, vendorController.createStore);
-  vendorRoutes.get("/me", requireAuth, vendorController.getMyStore);
-}
+// GET /api/vendors/me  ->  get my own store (must be logged in)
+vendorRoutes.get("/me", requireAuth, vendorController.getMyStore);
