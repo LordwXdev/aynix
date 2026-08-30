@@ -148,4 +148,4 @@ The long-term vision is a full Amazon-style distributed system: separate service
 
 ## Author
 
-Built by [Lord](https://github.com/LordwXdev), CSIE student, as a learning project and the foundation for a real Haitian marketplace.
+Built by [Lord](https://github.com/LordwXdev), CSIE student at Tamkang University(Taiwan), as a learning project and the foundation for a real Haitian marketplace.
