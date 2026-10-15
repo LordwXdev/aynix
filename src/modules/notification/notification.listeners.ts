@@ -6,7 +6,7 @@ import { realtimeHub } from "../../shared/realtime/hub.js";
 const ORDER_MESSAGES: Record<string, string> = {
   CONFIRMED: "has been confirmed by the store and is waiting for a driver",
   SHIPPED: "is on the way",
-  DELIVERED: "has been delivered. Thank you for shopping with Aynix!",
+  DELIVERED: "has been delivered. Thank you for shopping with Aynix",
   CANCELLED: "has been cancelled",
 };
 

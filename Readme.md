@@ -10,7 +10,7 @@ Backend core is complete and tested end to end. A full order goes from checkout,
 
 The web admin panel is built too (`admin/`): dashboard, live driver map, and every admin action from the API.
 
-Next: the mobile app (React Native).
+The mobile app is built too (`mobile/`): one Expo app where customers shop, sellers run their store and drivers deliver.
 
 ## Tech stack
 
@@ -66,6 +66,7 @@ src/
     errors.ts         → clean error responses
   app.ts              → app entry point, wires modules together
 admin/                → web admin panel (React), see admin/README.md
+mobile/               → mobile app (Expo / React Native), see mobile/README.md
 prisma/
   schema.prisma       → database schema
   seed.ts             → first admin + starter categories
@@ -170,6 +171,16 @@ npm run admin
 ```
 
 Open http://localhost:5173 and log in with your `ADMIN_PHONE` and `ADMIN_PASSWORD`.
+
+**Run the mobile app** (needs the Expo Go app on your phone, same Wi-Fi as your computer):
+
+```bash
+cd mobile
+npm install
+npx expo start          # scan the QR code with your phone
+```
+
+See `mobile/README.md` for details.
 
 **Test the whole flow** (with the server running):
 
@@ -304,7 +315,7 @@ Every user automatically joins their own room. Admins also join the admin room.
 - [x] Real-time updates and live GPS (Socket.io)
 - [x] Admin control center API with analytics
 - [x] Web admin panel (React)
-- [ ] Mobile app (React Native: customer, vendor, driver views)
+- [x] Mobile app (React Native: customer, vendor, driver views)
 - [ ] Image uploads (S3 / Cloudinary)
 - [ ] Real SMS provider and push notifications
 - [ ] MonCash / NatCash payments, vendor payouts, driver earnings

@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "Aynix",
+    "slug": "aynix",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "ht.aynix.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Aynix uses your location to find the closest driver and to show customers where their delivery is."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#1846C7",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "ht.aynix.app",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Aynix uses your location to find the closest driver and to show customers where their delivery is."
+        }
+      ]
+    ],
+    "scheme": "aynix",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F5F6FA"
+    }
+  }
+}
