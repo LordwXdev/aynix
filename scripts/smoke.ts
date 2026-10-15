@@ -14,22 +14,30 @@ const DEPARTMENT = `Test-${run}`;
 
 type Json = Record<string, any>;
 
-const call = async (method: string, path: string, token?: string, body?: unknown) => {
+const call = async (method: string, path: string, token?: string, body?: unknown, headers: Record<string, string> = {}) => {
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...headers,
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const data = (await res.json().catch(() => ({}))) as Json;
-  return { status: res.status, data };
+  return { status: res.status, data, headers: res.headers };
 };
 
 // call and insist on a status code
-const expect = async (status: number, method: string, path: string, token?: string, body?: unknown) => {
-  const res = await call(method, path, token, body);
+const expect = async (
+  status: number,
+  method: string,
+  path: string,
+  token?: string,
+  body?: unknown,
+  headers?: Record<string, string>
+) => {
+  const res = await call(method, path, token, body, headers);
   assert.equal(res.status, status, `${method} ${path} -> ${res.status} ${JSON.stringify(res.data)}`);
   return res.data;
 };
@@ -254,6 +262,44 @@ const main = async () => {
   const thirdDone = await expect(200, "GET", `/api/orders/${third.order.id}`, customer.access);
   assert.equal(thirdDone.order.status, "DELIVERED");
   step("driver declined, admin assigned by hand, failed delivery was retried and delivered");
+
+  // --- idempotency: a retried "place order" never makes two orders ---
+  const stockBefore = (await expect(200, "GET", `/api/products/${product.id}`)).product.stockQty;
+  const key = { "Idempotency-Key": `smoke-${run}-${Math.random().toString(36).slice(2)}` };
+  const orderBody = {
+    items: [{ productId: product.id, quantity: 1 }],
+    deliveryAddress: "1 Rue Test",
+    deliveryCity: "Port-au-Prince",
+    deliveryDepartment: DEPARTMENT,
+  };
+  const first = await call("POST", "/api/v1/orders", customer.access, orderBody, key);
+  assert.equal(first.status, 201);
+  // same request again, like a phone retrying after the network dropped
+  const again = await call("POST", "/api/v1/orders", customer.access, orderBody, key);
+  assert.equal(again.status, 201);
+  assert.equal(again.data.order.id, first.data.order.id, "a retry must return the same order");
+  assert.equal(again.headers.get("idempotent-replayed"), "true");
+  // same key but a different order is a mistake
+  await expect(422, "POST", "/api/v1/orders", customer.access, { ...orderBody, deliveryAddress: "Elsewhere" }, key);
+  const stockAfter = (await expect(200, "GET", `/api/products/${product.id}`)).product.stockQty;
+  assert.equal(stockAfter, stockBefore - 1, "stock must only be taken once");
+  await expect(200, "POST", `/api/orders/${first.data.order.id}/cancel`, customer.access);
+  step("retrying an order with the same Idempotency-Key gives one order, not two (also on /api/v1)");
+
+  // --- ops endpoints ---
+  const ready = await expect(200, "GET", "/health/ready");
+  assert.equal(ready.checks.database, "ok");
+  const letters = await expect(200, "GET", "/api/admin/dead-letters", adminToken);
+  assert.ok(Array.isArray(letters.items));
+  // through the public gateway /metrics is hidden on purpose; monitoring reads it inside the network
+  const metricsRes = await fetch(process.env.METRICS_URL ?? `${BASE}/metrics`);
+  if (metricsRes.status === 404) {
+    step("readiness check and dead letters work (metrics are private behind the gateway, as they should be)");
+  } else {
+    const metrics = await metricsRes.text();
+    assert.ok(metrics.includes("aynix_orders_placed_total"), "metrics must include business counters");
+    step("readiness check, dead letters and metrics endpoints work");
+  }
 
   // --- admin ---
   const dash = await expect(200, "GET", "/api/admin/dashboard", adminToken);

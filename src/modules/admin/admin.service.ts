@@ -1,6 +1,7 @@
 import { adminRepository } from "./admin.repository.js";
 import { userService } from "../user/user.service.js";
 import { driverService } from "../delivery/driver.service.js";
+import { eventBus } from "../../shared/events/event-bus.js";
 
 const ROLES = ["CUSTOMER", "VENDOR", "DRIVER", "ADMIN"] as const;
 const ORDER_STATUS = ["PENDING", "CONFIRMED", "SHIPPED", "DELIVERED", "CANCELLED"] as const;
@@ -105,5 +106,35 @@ export const adminService = {
       throw new Error("Order not found");
     }
     return order;
+  },
+
+  // --- dead letters: events and texts that kept failing ---
+
+  listDeadLetters: async (input: { resolved: boolean; page: number; limit: number }) => {
+    const { page, limit, skip } = paging(input.page, input.limit);
+    const result = await adminRepository.listDeadLetters({ resolved: input.resolved, skip, take: limit });
+    return { ...result, page, limit };
+  },
+
+  // run the failed listener again with the same data
+  retryDeadLetter: async (id: string) => {
+    const letter = await adminRepository.findDeadLetter(id);
+    if (!letter) throw new Error("Dead letter not found");
+    if (letter.resolvedAt) throw new Error("This one is already resolved");
+    try {
+      await eventBus.replay(letter.handler, letter.payload);
+      return adminRepository.resolveDeadLetter(id);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await adminRepository.failDeadLetterAgain(id, message);
+      throw new Error(`Still failing: ${message}`);
+    }
+  },
+
+  // mark as handled without running it again
+  resolveDeadLetter: async (id: string) => {
+    const letter = await adminRepository.findDeadLetter(id);
+    if (!letter) throw new Error("Dead letter not found");
+    return adminRepository.resolveDeadLetter(id);
   },
 };

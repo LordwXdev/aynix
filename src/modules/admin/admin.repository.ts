@@ -153,4 +153,26 @@ export const adminRepository = {
       },
     });
   },
+
+  listDeadLetters: async (filters: { resolved: boolean; skip: number; take: number }) => {
+    const where = { resolvedAt: filters.resolved ? { not: null } : null };
+    const [items, total] = await Promise.all([
+      prisma.deadLetter.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: filters.skip,
+        take: filters.take,
+      }),
+      prisma.deadLetter.count({ where }),
+    ]);
+    return { items, total };
+  },
+
+  findDeadLetter: async (id: string) => prisma.deadLetter.findUnique({ where: { id } }),
+
+  resolveDeadLetter: async (id: string) =>
+    prisma.deadLetter.update({ where: { id }, data: { resolvedAt: new Date() } }),
+
+  failDeadLetterAgain: async (id: string, error: string) =>
+    prisma.deadLetter.update({ where: { id }, data: { error, attempts: { increment: 1 } } }),
 };

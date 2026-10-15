@@ -1,0 +1,56 @@
+# Prometheus alert rules for Aynix
+# they watch the SLOs in docs/runbook.md and page the person on call
+groups:
+  - name: aynix
+    rules:
+      # SLO: 99.5% of API requests succeed. alert when we burn the error budget too fast
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_request_duration_seconds_count{status=~"5.."}[5m]))
+            / sum(rate(http_request_duration_seconds_count[5m])) > 0.02
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "More than 2% of API requests are failing"
+          runbook: "docs/runbook.md#api-errors"
+
+      # SLO: p99 latency under 1 second
+      - alert: SlowRequests
+        expr: |
+          histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{route!~"/health.*|/metrics"}[10m])) by (le)) > 1
+        for: 10m
+        labels: { severity: ticket }
+        annotations:
+          summary: "p99 latency is above 1 second"
+          runbook: "docs/runbook.md#slow-api"
+
+      - alert: ApiDown
+        expr: up{job="aynix-api"} == 0
+        for: 2m
+        labels: { severity: page }
+        annotations:
+          summary: "An API server is not answering"
+          runbook: "docs/runbook.md#api-down"
+
+      # business check: during the day, no orders for 2 hours means something is broken
+      - alert: NoOrders
+        expr: increase(aynix_orders_placed_total[2h]) == 0 and on() hour() >= 13 and on() hour() < 23
+        labels: { severity: ticket }
+        annotations:
+          summary: "No orders in the last 2 hours (daytime in Haiti)"
+          runbook: "docs/runbook.md#no-orders"
+
+      - alert: EventsFailing
+        expr: increase(aynix_event_handler_failures_total[15m]) > 0
+        labels: { severity: ticket }
+        annotations:
+          summary: "Events are landing in dead letters"
+          runbook: "docs/runbook.md#dead-letters"
+
+      - alert: HighMemory
+        expr: process_resident_memory_bytes{job="aynix-api"} > 450e6
+        for: 15m
+        labels: { severity: ticket }
+        annotations:
+          summary: "API memory keeps growing (possible memory leak)"
+          runbook: "docs/runbook.md#memory"

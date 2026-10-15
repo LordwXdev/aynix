@@ -16,7 +16,8 @@ export const RealtimeProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     // a function, so every reconnect sends the newest token
-    const s = io({ auth: (cb) => cb({ token: tokens.access }), transports: ["websocket"] });
+    // websocket first, long polling if a network blocks websockets
+    const s = io({ auth: (cb) => cb({ token: tokens.access }), transports: ["websocket", "polling"] });
 
     s.on("connect", () => setConnected(true));
     s.on("disconnect", () => setConnected(false));

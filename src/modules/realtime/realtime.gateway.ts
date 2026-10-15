@@ -1,5 +1,7 @@
 import type { Server as HttpServer } from "node:http";
 import { Server, Socket } from "socket.io";
+import { createAdapter } from "@socket.io/redis-adapter";
+import { redisPubSub } from "../../shared/redis.js";
 import { verifyAccessToken, TokenPayload } from "../../shared/middleware/auth.js";
 import { realtimeHub, rooms } from "../../shared/realtime/hub.js";
 import { orderService } from "../order/order.service.js";
@@ -13,6 +15,12 @@ export const startRealtime = (httpServer: HttpServer) => {
   const io = new Server(httpServer, {
     cors: { origin: env.corsOrigins.includes("*") ? "*" : env.corsOrigins },
   });
+
+  // with several servers, Redis pub/sub passes every live message to all of them,
+  // so a phone connected to server 1 still hears what happened on server 2
+  if (redisPubSub) {
+    io.adapter(createAdapter(redisPubSub.pub, redisPubSub.sub));
+  }
 
   // check the token once, when the socket connects
   io.use((socket, next) => {

@@ -16,12 +16,21 @@ export interface AuthRequest extends Request {
 }
 
 // check an access token and return what is inside, or null if it is bad
+// to change the signing key without logging everyone out:
+// set JWT_SECRET_PREVIOUS to the old key and JWT_SECRET to the new one,
+// then remove JWT_SECRET_PREVIOUS once old tokens have expired (15 min)
+const VERIFY_KEYS = [env.jwtSecret, env.jwtSecretPrevious].filter(Boolean) as string[];
+
 export const verifyAccessToken = (token: string): TokenPayload | null => {
-  try {
-    return jwt.verify(token, env.jwtSecret) as TokenPayload;
-  } catch {
-    return null;
+  for (const key of VERIFY_KEYS) {
+    try {
+      // clockTolerance: servers' clocks are never perfectly in sync
+      return jwt.verify(token, key, { clockTolerance: 30 }) as TokenPayload;
+    } catch {
+      /* try the next key */
+    }
   }
+  return null;
 };
 
 export const requireAuth = (

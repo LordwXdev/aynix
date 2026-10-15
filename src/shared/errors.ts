@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { logger } from "./logger.js";
 
 // throw this from any service to send a clean error with the right status code
 export class AppError extends Error {
@@ -44,7 +45,7 @@ export const errorHandler = (
     return res.status(404).json({ error: "Not found" });
   }
 
-  console.error(err);
+  logger.error({ err, requestId: req.id }, "unhandled error");
   return res.status(500).json({ error: "Something went wrong" });
 };
 

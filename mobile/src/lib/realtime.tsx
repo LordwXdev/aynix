@@ -18,7 +18,9 @@ export const RealtimeProvider = ({ children }: { children: ReactNode }) => {
     if (!userId) return;
     const s = io(API_URL, {
       auth: (cb) => cb({ token: session.access }),
-      transports: ["websocket"],
+      // try websocket first; on networks that block it, fall back to long polling
+      transports: ["websocket", "polling"],
+      reconnectionDelayMax: 10_000,
     });
     // screens get the socket once it is really connected
     s.on("connect", () => setSocket(s));

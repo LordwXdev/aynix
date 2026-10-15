@@ -1,10 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, View } from "react-native";
 import { Button, Card, ChoiceChips, Divider, ErrorText, Field, Header, Notice, Row, Screen, T } from "@/components/ui";
-import { api, errorText } from "@/lib/api";
+import { api, errorText, newIdempotencyKey } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useCart } from "@/lib/cart";
 import { DEPARTMENTS, money } from "@/lib/format";
@@ -21,6 +21,13 @@ export default function Checkout() {
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // the same key for every retry of this exact order, so a double tap or a
+  // dropped connection never creates two orders. a new key if anything changes
+  const orderKey = useRef(newIdempotencyKey());
+  useEffect(() => {
+    orderKey.current = newIdempotencyKey();
+  }, [lines, address, city, department, notes, coords]);
 
   // optional: the exact spot helps us send the closest driver
   const useMyLocation = async () => {
@@ -57,7 +64,7 @@ export default function Checkout() {
         deliveryLatitude: coords?.lat,
         deliveryLongitude: coords?.lng,
         paymentMethod: "CASH_ON_DELIVERY",
-      });
+      }, { idempotencyKey: orderKey.current });
       // remember the address for next time
       api
         .patch<{ user: User }>("/api/users/me", { address: address.trim(), city: city.trim(), department })

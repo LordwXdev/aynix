@@ -1,5 +1,13 @@
 import { productRepository } from "./product.repository.js";
 import { vendorService } from "../vendor/vendor.service.js";
+import { isSafeImageUrl } from "../../shared/utils/validate.js";
+
+const checkImages = (images: unknown) => {
+  if (images === undefined) return;
+  if (!Array.isArray(images) || images.length > 10 || !images.every(isSafeImageUrl)) {
+    throw new Error("images must be a list of up to 10 web links (http or https)");
+  }
+};
 
 const ALLOWED_STATUS = ["DRAFT", "ACTIVE", "INACTIVE", "OUT_OF_STOCK"] as const;
 type ProductStatus = (typeof ALLOWED_STATUS)[number];
@@ -37,6 +45,7 @@ export const productService = {
     if (input.status && !ALLOWED_STATUS.includes(input.status)) {
       throw new Error("Invalid status");
     }
+    checkImages(input.images);
 
     const category = await productRepository.findCategoryById(input.categoryId);
     if (!category) {
@@ -128,6 +137,7 @@ export const productService = {
     if (input.status && !ALLOWED_STATUS.includes(input.status)) {
       throw new Error("Invalid status");
     }
+    checkImages(input.images);
 
     return productRepository.update(productId, input);
   },

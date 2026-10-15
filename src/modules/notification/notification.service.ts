@@ -1,6 +1,13 @@
 import { notificationRepository } from "./notification.repository.js";
 import { realtimeHub } from "../../shared/realtime/hub.js";
 import { sms } from "../../shared/sms/sms.js";
+import { eventBus } from "../../shared/events/event-bus.js";
+
+// lets an admin resend a text that failed
+eventBus.registerReplayable("sms", async (payload) => {
+  const { phone, message } = payload as { phone: string; message: string };
+  await sms.send(phone, message);
+});
 
 export interface NewNotification {
   type: string;
@@ -28,7 +35,12 @@ export const notificationService = {
     if (input.sms) {
       const phone = await notificationRepository.findUserPhone(userId);
       if (phone) {
-        await sms.send(phone, `Aynix: ${input.body}`);
+        const message = `Aynix: ${input.body}`;
+        // a failed text must not undo the in-app notification:
+        // keep it as a dead letter so it can be sent again later
+        await sms.send(phone, message).catch((err) =>
+          notificationRepository.saveFailedSms(phone, message, err)
+        );
       }
     }
 

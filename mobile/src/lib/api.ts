@@ -80,25 +80,69 @@ const withQuery = (path: string, query?: Query) => {
   return parts.length ? `${path}?${parts.join("&")}` : path;
 };
 
+const TIMEOUT_MS = 15_000;
+const MAX_ATTEMPTS = 3;
+
+// a random id for one user action, e.g. one tap on "Place order".
+// sent as Idempotency-Key so retries of that action never happen twice on the server
+export const newIdempotencyKey = () =>
+  `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+
+// stop waiting for a request that takes too long (very common on weak mobile networks)
+const fetchWithTimeout = async (url: string, init: RequestInit) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+// exponential backoff with jitter: wait ~0.3s, then ~1.2s, then ~4.8s
+const backoff = (attempt: number) =>
+  new Promise((r) => setTimeout(r, Math.random() * Math.min(5_000, 300 * 4 ** attempt)));
+
+// the server is busy or restarting: worth trying again
+const RETRY_STATUS = new Set([429, 502, 503, 504]);
+
+interface RequestOptions {
+  query?: Query;
+  body?: unknown;
+  idempotencyKey?: string;
+}
+
 const request = async <T>(
   method: string,
   path: string,
-  options: { query?: Query; body?: unknown } = {},
+  options: RequestOptions = {},
   retried = false
 ): Promise<T> => {
-  let res: Response;
-  try {
-    res = await fetch(`${API_URL}${withQuery(path, options.query)}`, {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-      },
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
-    });
-  } catch {
-    throw new ApiError(0, "Can't reach Aynix. Check your internet connection.");
+  // only retry what is safe to repeat: reads, and writes that carry an Idempotency-Key
+  const canRetry = method === "GET" || !!options.idempotencyKey;
+  let res: Response | null = null;
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    try {
+      res = await fetchWithTimeout(`${API_URL}${withQuery(path, options.query)}`, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          ...(options.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {}),
+        },
+        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      });
+      if (!canRetry || !RETRY_STATUS.has(res.status) || attempt === MAX_ATTEMPTS - 1) break;
+    } catch {
+      // no connection or timed out
+      if (!canRetry || attempt === MAX_ATTEMPTS - 1) {
+        throw new ApiError(0, "Can't reach Aynix. Check your internet connection and try again.");
+      }
+    }
+    await backoff(attempt);
   }
+  if (!res) throw new ApiError(0, "Can't reach Aynix. Check your internet connection and try again.");
 
   // the short access token expired: get a new one and try again once
   if (res.status === 401 && !retried && refreshToken) {
@@ -118,7 +162,8 @@ const request = async <T>(
 
 export const api = {
   get: <T>(path: string, query?: Query) => request<T>("GET", path, { query }),
-  post: <T>(path: string, body?: unknown) => request<T>("POST", path, { body }),
+  post: <T>(path: string, body?: unknown, opts: { idempotencyKey?: string } = {}) =>
+    request<T>("POST", path, { body, ...opts }),
   patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, { body }),
 };
 

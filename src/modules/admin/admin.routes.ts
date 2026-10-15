@@ -30,3 +30,7 @@ adminRoutes.post("/deliveries/:id/auto-assign", adminController.autoAssign);
 adminRoutes.get("/categories", adminController.listCategories);
 adminRoutes.post("/categories", adminController.createCategory);
 adminRoutes.patch("/categories/:id", adminController.updateCategory);
+
+adminRoutes.get("/dead-letters", adminController.listDeadLetters);
+adminRoutes.post("/dead-letters/:id/retry", adminController.retryDeadLetter);
+adminRoutes.post("/dead-letters/:id/resolve", adminController.resolveDeadLetter);

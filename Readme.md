@@ -21,7 +21,8 @@ The mobile app is built too (`mobile/`): one Expo app where customers shop, sell
 - **ORM:** Prisma 7
 - **Auth:** JWT access tokens + rotating refresh tokens, bcrypt for passwords
 - **Real-time:** Socket.io
-- **Security:** helmet, CORS, rate limiting
+- **Security:** helmet, CORS, rate limiting (per user, shared through Redis)
+- **Ops:** Docker, NGINX gateway, GitHub Actions, Prometheus metrics, JSON logs (pino)
 - **Version control:** Git / GitHub
 
 ## Architecture
@@ -147,13 +148,15 @@ npm install
 cp .env.example .env     # then fill it in
 ```
 
-Push the schema, generate the Prisma client, and seed the admin + categories:
+Create the database tables, generate the Prisma client, and seed the admin + categories:
 
 ```bash
-npm run db:push
+npm run db:migrate
 npm run db:generate
 npm run seed
 ```
+
+> **Already set up your database with `db:push` before?** Run `npm run db:baseline` once, then `npm run db:migrate`. Your data stays. From now on, always use `db:migrate`. It applies versioned changes and never drops data on its own.
 
 Run the dev server:
 
@@ -185,12 +188,44 @@ See `mobile/README.md` for details.
 **Test the whole flow** (with the server running):
 
 ```bash
-npm run smoke
+npm run smoke              # a full order, from sign-up to delivery (15 checks)
+npm run test:resilience    # retries, timeouts, circuit breaker, dead letters, locks
 ```
+
+## Run everything with Docker
+
+One command starts the database, Redis, the migrations, the API and the gateway (the admin panel plus the API behind NGINX):
+
+```bash
+cp .env.example .env            # fill in the two JWT secrets and the admin login
+docker compose up -d --build
+docker compose run --rm seed    # first time: admin account + categories
+```
+
+Open **http://localhost:8080**. The API is at `http://localhost:8080/api`.
+
+| Command | What it does |
+|---|---|
+| `docker compose up -d --scale api=3` | run 3 API servers behind the gateway |
+| `docker compose run --rm backup` | save a backup of the database to `./backups` |
+| `docker compose logs -f api` | follow the API logs |
+| `docker compose down` | stop everything (the data stays) |
+
+## Production
+
+Aynix follows a checklist of 111 production practices (rate limiting, idempotency, migrations, health checks, metrics, backups…). See **[docs/production-readiness.md](docs/production-readiness.md)** for where each one stands, and **[docs/runbook.md](docs/runbook.md)** for what to do when something breaks.
+
+| Endpoint | For |
+|---|---|
+| `GET /health/live` | is the process alive (restart it if not) |
+| `GET /health/ready` | can it take traffic (database and Redis OK) |
+| `GET /metrics` | Prometheus metrics (private, not exposed by the gateway) |
+
+Every response has an `X-Request-Id`. The same id is in every log line for that request.
 
 ## API endpoints
 
-Protected routes need an `Authorization: Bearer <accessToken>` header.
+Every route works under `/api/v1/...` (and `/api/...` as an alias). Protected routes need an `Authorization: Bearer <accessToken>` header.
 
 **Users** `/api/users`
 
@@ -226,7 +261,7 @@ Protected routes need an `Authorization: Bearer <accessToken>` header.
 
 | Method | Endpoint | Who | Description |
 |---|---|---|---|
-| POST | `/` | Customer | Place an order (cash on delivery) |
+| POST | `/` | Customer | Place an order (cash on delivery). Send an `Idempotency-Key` header so retries never create two orders |
 | GET | `/` | Customer | My orders |
 | GET | `/:id` | Customer | One order |
 | GET | `/:id/tracking` | Customer | Delivery status, driver and position |
@@ -276,6 +311,9 @@ Protected routes need an `Authorization: Bearer <accessToken>` header.
 | POST | `/deliveries/:id/assign` | `{ driverId }` pick a driver by hand (also retries failed ones) |
 | POST | `/deliveries/:id/auto-assign` | Run the matching again now |
 | GET / POST / PATCH | `/categories` | Manage categories |
+| GET | `/dead-letters` | Events and texts that kept failing |
+| POST | `/dead-letters/:id/retry` | Run one again once the cause is fixed |
+| POST | `/dead-letters/:id/resolve` | Dismiss one |
 
 ## Real-time (Socket.io)
 

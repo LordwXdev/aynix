@@ -6,6 +6,7 @@ import { announceOrderChange } from "../order/order.service.js";
 import { prisma } from "../../shared/database/prisma.js";
 import { eventBus } from "../../shared/events/event-bus.js";
 import { distanceKm } from "../../shared/utils/geo.js";
+import { lockInTransaction } from "../../shared/database/locks.js";
 
 // a driver who has not sent their position for this long is treated as gone
 const DRIVER_FRESH_MINUTES = 30;
@@ -19,8 +20,9 @@ const DELIVERY_STATUS: DeliveryStatus[] = [
   "CANCELLED",
 ];
 
-// run driver assignment one at a time so two jobs never grab the same driver
-// (fine for one server; with many servers this becomes a database lock)
+// driver assignment runs one at a time so two jobs never grab the same driver:
+// - inside this server, a simple queue keeps them in line
+// - across servers, a Postgres advisory lock does the same job
 let assignQueue: Promise<unknown> = Promise.resolve();
 const oneAtATime = <T>(work: () => Promise<T>): Promise<T> => {
   const run = assignQueue.then(work);
@@ -101,21 +103,29 @@ export const deliveryService = {
   // returns the driver id, or null if nobody is free right now
   autoAssign: (deliveryId: string) =>
     oneAtATime(async () => {
-      const delivery = await deliveryRepository.findById(deliveryId);
-      if (!delivery || delivery.status !== "WAITING_FOR_DRIVER") return null;
+      const result = await prisma.$transaction(
+        async (tx) => {
+          // everything below happens while we hold the lock
+          await lockInTransaction(tx, "driverAssignment");
 
-      const driver = await chooseDriver(delivery);
-      if (!driver) return null;
+          const delivery = await deliveryRepository.findById(deliveryId);
+          if (!delivery || delivery.status !== "WAITING_FOR_DRIVER") return null;
 
-      const assigned = await prisma.$transaction(async (tx) => {
-        if (await deliveryRepository.driverIsBusy(tx, driver.id)) return false;
-        return deliveryRepository.transition(tx, deliveryId, ["WAITING_FOR_DRIVER"], {
-          status: "ASSIGNED",
-          driverId: driver.id,
-          assignedAt: new Date(),
-        });
-      });
-      if (!assigned) return null;
+          const driver = await chooseDriver(delivery);
+          if (!driver) return null;
+
+          if (await deliveryRepository.driverIsBusy(tx, driver.id)) return null;
+          const ok = await deliveryRepository.transition(tx, deliveryId, ["WAITING_FOR_DRIVER"], {
+            status: "ASSIGNED",
+            driverId: driver.id,
+            assignedAt: new Date(),
+          });
+          return ok ? { delivery, driver } : null;
+        },
+        { timeout: 15_000 }
+      );
+      if (!result) return null;
+      const { delivery, driver } = result;
 
       eventBus.emit("delivery.assigned", {
         deliveryId,
@@ -295,6 +305,7 @@ export const deliveryService = {
 
     await oneAtATime(() =>
       prisma.$transaction(async (tx) => {
+        await lockInTransaction(tx, "driverAssignment");
         if (await deliveryRepository.driverIsBusy(tx, driverId, deliveryId)) {
           throw new Error("This driver is already on another job");
         }

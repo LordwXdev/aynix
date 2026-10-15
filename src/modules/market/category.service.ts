@@ -10,8 +10,21 @@ const makeSlug = (name: string) =>
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-");
 
+// categories almost never change, but every app screen asks for them:
+// keep them in memory for 5 minutes, and throw the copy away when an admin edits one
+const CACHE_MS = 5 * 60_000;
+let cached: { at: number; value: Awaited<ReturnType<typeof categoryRepository.listActive>> } | null = null;
+const invalidate = () => {
+  cached = null;
+};
+
 export const categoryService = {
-  listActive: () => categoryRepository.listActive(),
+  listActive: async () => {
+    if (cached && Date.now() - cached.at < CACHE_MS) return cached.value;
+    const value = await categoryRepository.listActive();
+    cached = { at: Date.now(), value };
+    return value;
+  },
 
   listAll: () => categoryRepository.listAll(),
 
@@ -26,7 +39,9 @@ export const categoryService = {
     if (input.parentId && !(await categoryRepository.findById(input.parentId))) {
       throw new Error("Parent category not found");
     }
-    return categoryRepository.create({ ...input, slug });
+    const category = await categoryRepository.create({ ...input, slug });
+    invalidate();
+    return category;
   },
 
   update: async (
@@ -39,6 +54,8 @@ export const categoryService = {
     if (input.parentId === id) {
       throw new Error("A category cannot be its own parent");
     }
-    return categoryRepository.update(id, input);
+    const category = await categoryRepository.update(id, input);
+    invalidate();
+    return category;
   },
 };

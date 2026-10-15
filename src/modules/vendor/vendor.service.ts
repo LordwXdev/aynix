@@ -2,6 +2,7 @@ import { vendorRepository, StoreDetails } from "./vendor.repository.js";
 import { userRepository } from "../user/user.repository.js";
 import { eventBus } from "../../shared/events/event-bus.js";
 import { isValidLatLng } from "../../shared/utils/geo.js";
+import { isSafeImageUrl } from "../../shared/utils/validate.js";
 
 const VENDOR_STATUS = ["PENDING", "ACTIVE", "SUSPENDED", "REJECTED"] as const;
 type VendorStatus = (typeof VENDOR_STATUS)[number];
@@ -18,7 +19,11 @@ const makeSlug = (name: string): string => {
 };
 
 // latitude and longitude must come together and be real coordinates
+// (and a logo must be a normal web link)
 const checkLocation = (details: StoreDetails) => {
+  if (details.logoUrl !== undefined && !isSafeImageUrl(details.logoUrl)) {
+    throw new Error("logoUrl must be a web link (http or https)");
+  }
   const hasLat = details.latitude !== undefined;
   const hasLng = details.longitude !== undefined;
   if (hasLat !== hasLng) {

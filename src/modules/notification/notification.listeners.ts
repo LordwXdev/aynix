@@ -12,7 +12,9 @@ const ORDER_MESSAGES: Record<string, string> = {
 
 // listens to what happens in the system and tells the right people
 export const registerNotificationListeners = () => {
-  eventBus.on("order.placed", async ({ orderId, orderNumber, customerId, vendorIds }) => {
+  const on = eventBus.subscriber("notification");
+
+  on("order.placed", async ({ orderId, orderNumber, customerId, vendorIds }) => {
     await notificationService.send(customerId, {
       type: "order.placed",
       title: "Order received",
@@ -33,7 +35,7 @@ export const registerNotificationListeners = () => {
     }
   });
 
-  eventBus.on("order.status_changed", async ({ orderId, orderNumber, customerId, status }) => {
+  on("order.status_changed", async ({ orderId, orderNumber, customerId, status }) => {
     const message = ORDER_MESSAGES[status];
     if (!message) return;
     await notificationService.send(customerId, {
@@ -45,7 +47,7 @@ export const registerNotificationListeners = () => {
     });
   });
 
-  eventBus.on("delivery.assigned", async ({ deliveryId, orderId, orderNumber, customerId, driverUserId }) => {
+  on("delivery.assigned", async ({ deliveryId, orderId, orderNumber, customerId, driverUserId }) => {
     await notificationService.send(driverUserId, {
       type: "driver.new_job",
       title: "New delivery job",
@@ -61,7 +63,7 @@ export const registerNotificationListeners = () => {
     });
   });
 
-  eventBus.on("delivery.status_changed", async (event) => {
+  on("delivery.status_changed", async (event) => {
     // the control center sees every delivery change live
     realtimeHub.toAdmins("admin:delivery", event);
 
@@ -84,7 +86,7 @@ export const registerNotificationListeners = () => {
     }
   });
 
-  eventBus.on("vendor.status_changed", async ({ userId, status }) => {
+  on("vendor.status_changed", async ({ userId, status }) => {
     const text: Record<string, string> = {
       ACTIVE: "Your store has been approved. You can start selling!",
       SUSPENDED: "Your store has been suspended. Contact Aynix support.",
@@ -100,7 +102,7 @@ export const registerNotificationListeners = () => {
     });
   });
 
-  eventBus.on("driver.status_changed", async ({ userId, status }) => {
+  on("driver.status_changed", async ({ userId, status }) => {
     const text: Record<string, string> = {
       ACTIVE: "You are approved to drive with Aynix Move. Go online to get jobs!",
       SUSPENDED: "Your driver account has been suspended. Contact Aynix support.",

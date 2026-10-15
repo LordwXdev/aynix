@@ -42,6 +42,18 @@ export const notificationRepository = {
     return result.count;
   },
 
+  saveFailedSms: async (phone: string, message: string, err: unknown) => {
+    await prisma.deadLetter.create({
+      data: {
+        event: "sms.send",
+        handler: "sms",
+        payload: { phone, message },
+        error: err instanceof Error ? err.message : String(err),
+        attempts: 1,
+      },
+    });
+  },
+
   findUserPhone: async (userId: string) => {
     const user = await prisma.user.findUnique({
       where: { id: userId },

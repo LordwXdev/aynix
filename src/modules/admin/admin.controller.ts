@@ -178,4 +178,25 @@ export const adminController = {
     );
     res.json({ category });
   },
+
+  // --- dead letters ---
+  listDeadLetters: async (req: AuthRequest, res: Response) => {
+    res.json(
+      await adminService.listDeadLetters({
+        resolved: req.query.resolved === "true",
+        page: page(req),
+        limit: limit(req),
+      })
+    );
+  },
+
+  retryDeadLetter: async (req: AuthRequest, res: Response) => {
+    const letter = await run(() => adminService.retryDeadLetter(String(req.params.id)));
+    res.json({ letter });
+  },
+
+  resolveDeadLetter: async (req: AuthRequest, res: Response) => {
+    const letter = await run(() => adminService.resolveDeadLetter(String(req.params.id)), 404);
+    res.json({ letter });
+  },
 };

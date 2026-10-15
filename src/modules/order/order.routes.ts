@@ -1,11 +1,13 @@
 import { Router } from "express";
 import { orderController } from "./order.controller.js";
 import { requireAuth, requireRole } from "../../shared/middleware/auth.js";
+import { idempotent } from "../../shared/middleware/idempotency.js";
 
 export const orderRoutes = Router();
 
 // customer
-orderRoutes.post("/", requireAuth, orderController.create);
+// safe to retry: send an Idempotency-Key header
+orderRoutes.post("/", requireAuth, idempotent, orderController.create);
 orderRoutes.get("/", requireAuth, orderController.listMine);
 
 // vendor (these must stay above "/:id")
@@ -21,4 +23,4 @@ orderRoutes.patch(
 // customer: one order
 orderRoutes.get("/:id", requireAuth, orderController.getOne);
 orderRoutes.get("/:id/tracking", requireAuth, orderController.tracking);
-orderRoutes.post("/:id/cancel", requireAuth, orderController.cancel);
+orderRoutes.post("/:id/cancel", requireAuth, idempotent, orderController.cancel);
