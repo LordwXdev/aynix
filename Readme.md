@@ -8,7 +8,9 @@ This is a learning project as much as a product. Every module follows the same c
 
 Backend core is complete and tested end to end. A full order goes from checkout, to vendor confirmation, to automatic driver assignment, to live GPS tracking, to delivery and cash payment, with notifications and live updates at every step.
 
-Next: the web admin panel (React) and the mobile app (React Native).
+The web admin panel is built too (`admin/`): dashboard, live driver map, and every admin action from the API.
+
+Next: the mobile app (React Native).
 
 ## Tech stack
 
@@ -63,6 +65,7 @@ src/
     sms/              → SMS provider (console for now)
     errors.ts         → clean error responses
   app.ts              → app entry point, wires modules together
+admin/                → web admin panel (React), see admin/README.md
 prisma/
   schema.prisma       → database schema
   seed.ts             → first admin + starter categories
@@ -158,6 +161,15 @@ npm run dev
 ```
 
 Server runs at `http://localhost:3000`.
+
+**Run the admin panel** (in a second terminal):
+
+```bash
+npm run admin:install   # first time only
+npm run admin
+```
+
+Open http://localhost:5173 and log in with your `ADMIN_PHONE` and `ADMIN_PASSWORD`.
 
 **Test the whole flow** (with the server running):
 
@@ -291,7 +303,7 @@ Every user automatically joins their own room. Admins also join the admin room.
 - [x] Notifications (in-app + SMS hook)
 - [x] Real-time updates and live GPS (Socket.io)
 - [x] Admin control center API with analytics
-- [ ] Web admin panel (React)
+- [x] Web admin panel (React)
 - [ ] Mobile app (React Native: customer, vendor, driver views)
 - [ ] Image uploads (S3 / Cloudinary)
 - [ ] Real SMS provider and push notifications

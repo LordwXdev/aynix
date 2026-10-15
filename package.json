@@ -11,7 +11,10 @@
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "seed": "tsx prisma/seed.ts",
-    "smoke": "tsx scripts/smoke.ts"
+    "smoke": "tsx scripts/smoke.ts",
+    "admin": "npm --prefix admin run dev",
+    "admin:install": "npm --prefix admin install",
+    "admin:build": "npm --prefix admin run build"
   },
   "keywords": [],
   "author": "",
