@@ -1,6 +1,27 @@
-import { Response } from "express";
+import { Request, Response } from "express";
 import { vendorService } from "./vendor.service.js";
 import { AuthRequest } from "../../shared/middleware/auth.js";
+
+const errorMessage = (err: unknown) =>
+  err instanceof Error ? err.message : "Something went wrong";
+
+const optionalString = (value: unknown) =>
+  typeof value === "string" ? value.trim() : undefined;
+
+const optionalNumber = (value: unknown) =>
+  value === undefined || value === null || value === "" ? undefined : Number(value);
+
+// pull the store fields a vendor is allowed to set out of the request body
+const readStoreDetails = (body: Record<string, unknown>) => ({
+  description: optionalString(body.description),
+  whatsapp: optionalString(body.whatsapp),
+  logoUrl: optionalString(body.logoUrl),
+  address: optionalString(body.address),
+  city: optionalString(body.city),
+  department: optionalString(body.department),
+  latitude: optionalNumber(body.latitude),
+  longitude: optionalNumber(body.longitude),
+});
 
 export const vendorController = {
   // create a store for the logged-in user
@@ -11,7 +32,8 @@ export const vendorController = {
         return res.status(401).json({ error: "Not authenticated" });
       }
 
-      const { storeName, description, whatsapp } = req.body;
+      const body = req.body ?? {};
+      const storeName = optionalString(body.storeName);
 
       if (!storeName) {
         return res.status(400).json({ error: "storeName is required" });
@@ -20,17 +42,16 @@ export const vendorController = {
       const vendor = await vendorService.createStore({
         userId,
         storeName,
-        description,
-        whatsapp,
+        ...readStoreDetails(body),
       });
 
       return res.status(201).json({
-        message: "Store created successfully",
+        // the role inside the old access token is now out of date
+        message: "Store created successfully. Refresh your token to get vendor access.",
         vendor,
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Something went wrong";
-      return res.status(400).json({ error: message });
+      return res.status(400).json({ error: errorMessage(err) });
     }
   },
 
@@ -46,8 +67,31 @@ export const vendorController = {
 
       return res.status(200).json({ vendor });
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Something went wrong";
-      return res.status(404).json({ error: message });
+      return res.status(404).json({ error: errorMessage(err) });
+    }
+  },
+
+  // PATCH /api/vendors/me
+  updateMyStore: async (req: AuthRequest, res: Response) => {
+    try {
+      const body = req.body ?? {};
+      const vendor = await vendorService.updateMyStore(req.user!.userId, {
+        storeName: optionalString(body.storeName),
+        ...readStoreDetails(body),
+      });
+      return res.status(200).json({ message: "Store updated", vendor });
+    } catch (err) {
+      return res.status(400).json({ error: errorMessage(err) });
+    }
+  },
+
+  // GET /api/vendors/:slug  (public)
+  getPublicStore: async (req: Request, res: Response) => {
+    try {
+      const store = await vendorService.getPublicStore(String(req.params.slug));
+      return res.status(200).json({ store });
+    } catch (err) {
+      return res.status(404).json({ error: errorMessage(err) });
     }
   },
 };

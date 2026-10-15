@@ -79,7 +79,7 @@ export const productService = {
   // public: one product, only if it is active
   getProduct: async (id: string) => {
     const product = await productRepository.findById(id);
-    if (!product || product.status !== "ACTIVE") {
+    if (!product || product.status !== "ACTIVE" || product.vendor.status !== "ACTIVE") {
       throw new Error("Product not found");
     }
     return product;

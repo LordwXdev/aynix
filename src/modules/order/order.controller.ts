@@ -5,6 +5,9 @@ import { AuthRequest } from "../../shared/middleware/auth.js";
 const errorMessage = (err: unknown) =>
   err instanceof Error ? err.message : "Something went wrong";
 
+const optionalNumber = (value: unknown) =>
+  value === undefined || value === null || value === "" ? undefined : Number(value);
+
 export const orderController = {
   // POST /api/orders
   create: async (req: AuthRequest, res: Response) => {
@@ -20,8 +23,10 @@ export const orderController = {
         deliveryCity,
         deliveryDepartment,
         deliveryNotes,
+        deliveryLatitude,
+        deliveryLongitude,
         paymentMethod,
-      } = req.body;
+      } = req.body ?? {};
 
       if (!Array.isArray(items) || !deliveryAddress || !deliveryCity || !deliveryDepartment) {
         return res.status(400).json({
@@ -32,10 +37,12 @@ export const orderController = {
       const order = await orderService.createOrder({
         customerId: userId,
         items,
-        deliveryAddress,
-        deliveryCity,
-        deliveryDepartment,
-        deliveryNotes,
+        deliveryAddress: String(deliveryAddress),
+        deliveryCity: String(deliveryCity),
+        deliveryDepartment: String(deliveryDepartment),
+        deliveryNotes: deliveryNotes ? String(deliveryNotes) : undefined,
+        deliveryLatitude: optionalNumber(deliveryLatitude),
+        deliveryLongitude: optionalNumber(deliveryLongitude),
         paymentMethod: paymentMethod ?? "CASH_ON_DELIVERY",
       });
 
@@ -73,15 +80,46 @@ export const orderController = {
     }
   },
 
-  // GET /api/orders/vendor/items
+  // GET /api/orders/:id/tracking
+  tracking: async (req: AuthRequest, res: Response) => {
+    try {
+      const tracking = await orderService.getTracking(req.user!.userId, String(req.params.id));
+      return res.status(200).json({ tracking });
+    } catch (err) {
+      return res.status(404).json({ error: errorMessage(err) });
+    }
+  },
+
+  // POST /api/orders/:id/cancel
+  cancel: async (req: AuthRequest, res: Response) => {
+    try {
+      const order = await orderService.cancelMyOrder(req.user!.userId, String(req.params.id));
+      return res.status(200).json({ message: "Order cancelled", order });
+    } catch (err) {
+      return res.status(400).json({ error: errorMessage(err) });
+    }
+  },
+
+  // GET /api/orders/vendor/items?status=PENDING
   vendorItems: async (req: AuthRequest, res: Response) => {
     try {
       const userId = req.user?.userId;
       if (!userId) {
         return res.status(401).json({ error: "Not authenticated" });
       }
-      const items = await orderService.listVendorItems(userId);
+      const status = typeof req.query.status === "string" ? req.query.status : undefined;
+      const items = await orderService.listVendorItems(userId, status);
       return res.status(200).json({ items });
+    } catch (err) {
+      return res.status(400).json({ error: errorMessage(err) });
+    }
+  },
+
+  // GET /api/orders/vendor/sales
+  vendorSales: async (req: AuthRequest, res: Response) => {
+    try {
+      const sales = await orderService.vendorSales(req.user!.userId);
+      return res.status(200).json({ sales });
     } catch (err) {
       return res.status(400).json({ error: errorMessage(err) });
     }
@@ -95,11 +133,11 @@ export const orderController = {
         return res.status(401).json({ error: "Not authenticated" });
       }
 
-      const { status } = req.body;
-      const allowed = ["CONFIRMED", "SHIPPED", "DELIVERED", "CANCELLED"];
+      const { status } = req.body ?? {};
+      const allowed = ["CONFIRMED", "CANCELLED"];
       if (!allowed.includes(status)) {
         return res.status(400).json({
-          error: "status must be CONFIRMED, SHIPPED, DELIVERED, or CANCELLED",
+          error: "status must be CONFIRMED or CANCELLED (the driver handles shipping and delivery)",
         });
       }
 

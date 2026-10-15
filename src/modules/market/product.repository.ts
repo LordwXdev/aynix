@@ -22,7 +22,13 @@ export const productRepository = {
       where: { id },
       include: {
         vendor: {
-          select: { id: true, storeName: true, storeSlug: true, whatsapp: true },
+          select: {
+            id: true,
+            storeName: true,
+            storeSlug: true,
+            whatsapp: true,
+            status: true,
+          },
         },
       },
     });
@@ -39,8 +45,10 @@ export const productRepository = {
     skip: number;
     take: number;
   }) => {
+    // shoppers only see products from approved stores
     const where = {
       status: "ACTIVE" as const,
+      vendor: { status: "ACTIVE" as const },
       ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
       ...(filters.q
         ? { name: { contains: filters.q, mode: "insensitive" as const } }
@@ -53,6 +61,7 @@ export const productRepository = {
         orderBy: { createdAt: "desc" },
         skip: filters.skip,
         take: filters.take,
+        include: { vendor: { select: { storeName: true, storeSlug: true } } },
       }),
       prisma.product.count({ where }),
     ]);
