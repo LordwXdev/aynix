@@ -8,21 +8,25 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  name         String
-  phone        String   @unique
-  email        String?  @unique
-  passwordHash String   @map("password_hash")
-  role         Role     @default(CUSTOMER)
-  vendor       Vendor?
-  orders       Order[]
-  address      String?
-  city         String?
-  department   String?
-  isActive     Boolean  @default(true) @map("is_active")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id            String         @id @default(uuid())
+  name          String
+  phone         String         @unique
+  email         String?        @unique
+  passwordHash  String         @map("password_hash")
+  role          Role           @default(CUSTOMER)
+  vendor        Vendor?
+  driver        Driver?
+  orders        Order[]
+  refreshTokens RefreshToken[]
+  notifications Notification[]
+  address       String?
+  city          String?
+  department    String?
+  isActive      Boolean        @default(true) @map("is_active")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
 
+  @@index([role])
   @@map("users")
 }
 
@@ -34,28 +38,34 @@ model Vendor {
   description String?
   logoUrl     String?      @map("logo_url")
   whatsapp    String?
+  address     String?
+  city        String?
+  department  String?
+  latitude    Float?
+  longitude   Float?
   status      VendorStatus @default(PENDING)
   createdAt   DateTime     @default(now()) @map("created_at")
   updatedAt   DateTime     @updatedAt @map("updated_at")
 
-  user        User         @relation(fields: [userId], references: [id])
-  products    Product[]
-  orderItems  OrderItem[]
+  user       User        @relation(fields: [userId], references: [id])
+  products   Product[]
+  orderItems OrderItem[]
 
+  @@index([status])
   @@map("vendors")
 }
 
 model Category {
-  id        String     @id @default(uuid())
-  parentId  String?    @map("parent_id")
+  id        String  @id @default(uuid())
+  parentId  String? @map("parent_id")
   name      String
-  slug      String     @unique
-  sortOrder Int        @default(0) @map("sort_order")
-  isActive  Boolean    @default(true) @map("is_active")
+  slug      String  @unique
+  sortOrder Int     @default(0) @map("sort_order")
+  isActive  Boolean @default(true) @map("is_active")
 
-  parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id])
-  children  Category[] @relation("CategoryTree")
-  products  Product[]
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryTree")
+  products Product[]
 
   @@map("categories")
 }
@@ -75,10 +85,14 @@ model Product {
   createdAt    DateTime      @default(now()) @map("created_at")
   updatedAt    DateTime      @updatedAt @map("updated_at")
 
-  vendor       Vendor        @relation(fields: [vendorId], references: [id], onDelete: Cascade)
-  category     Category      @relation(fields: [categoryId], references: [id])
-  orderItems   OrderItem[]
+  vendor     Vendor      @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  category   Category    @relation(fields: [categoryId], references: [id])
+  orderItems OrderItem[]
 
+  // the shop page: active products, newest first
+  @@index([status, createdAt])
+  @@index([vendorId])
+  @@index([categoryId])
   @@map("products")
 }
 
@@ -96,12 +110,17 @@ model Order {
   deliveryCity       String        @map("delivery_city")
   deliveryDepartment String        @map("delivery_department")
   deliveryNotes      String?       @map("delivery_notes")
+  deliveryLatitude   Float?        @map("delivery_latitude")
+  deliveryLongitude  Float?        @map("delivery_longitude")
   createdAt          DateTime      @default(now()) @map("created_at")
   updatedAt          DateTime      @updatedAt @map("updated_at")
 
-  customer           User          @relation(fields: [customerId], references: [id])
-  items              OrderItem[]
+  customer User        @relation(fields: [customerId], references: [id])
+  items    OrderItem[]
+  delivery Delivery?
 
+  @@index([customerId, createdAt])
+  @@index([status, createdAt])
   @@map("orders")
 }
 
@@ -119,16 +138,20 @@ model OrderItem {
   vendorPayout     Decimal         @map("vendor_payout") @db.Decimal(14, 2)
   status           OrderItemStatus @default(PENDING)
 
-  order            Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product          Product         @relation(fields: [productId], references: [id])
-  vendor           Vendor          @relation(fields: [vendorId], references: [id])
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+  vendor  Vendor  @relation(fields: [vendorId], references: [id])
 
+  @@index([orderId])
+  @@index([vendorId, status])
+  @@index([productId])
   @@map("order_items")
 }
 
 enum Role {
   CUSTOMER
   VENDOR
+  DRIVER
   ADMIN
 }
 
@@ -137,6 +160,29 @@ enum VendorStatus {
   ACTIVE
   SUSPENDED
   REJECTED
+}
+
+enum DriverStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  REJECTED
+}
+
+enum VehicleType {
+  MOTO
+  CAR
+  BICYCLE
+  FOOT
+}
+
+enum DeliveryStatus {
+  WAITING_FOR_DRIVER
+  ASSIGNED
+  PICKED_UP
+  DELIVERED
+  FAILED
+  CANCELLED
 }
 
 enum ProductStatus {
@@ -174,4 +220,113 @@ enum PaymentStatus {
   PAID
   FAILED
   REFUNDED
+}
+
+// one row per login session, we only keep a hash of the token
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model Driver {
+  id          String       @id @default(uuid())
+  userId      String       @unique @map("user_id")
+  vehicleType VehicleType  @map("vehicle_type")
+  plateNumber String?      @map("plate_number")
+  city        String
+  department  String
+  status      DriverStatus @default(PENDING)
+  isOnline    Boolean      @default(false) @map("is_online")
+  latitude    Float?
+  longitude   Float?
+  lastSeenAt  DateTime?    @map("last_seen_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  user       User       @relation(fields: [userId], references: [id])
+  deliveries Delivery[]
+
+  // driver matching looks for active, online drivers in one department
+  @@index([status, isOnline, department])
+  @@map("drivers")
+}
+
+// one delivery per order, the driver picks up from each vendor then drops off
+model Delivery {
+  id                String         @id @default(uuid())
+  orderId           String         @unique @map("order_id")
+  driverId          String?        @map("driver_id")
+  status            DeliveryStatus @default(WAITING_FOR_DRIVER)
+  declinedDriverIds String[]       @default([]) @map("declined_driver_ids")
+  failReason        String?        @map("fail_reason")
+  assignedAt        DateTime?      @map("assigned_at")
+  pickedUpAt        DateTime?      @map("picked_up_at")
+  deliveredAt       DateTime?      @map("delivered_at")
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+
+  order  Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  driver Driver? @relation(fields: [driverId], references: [id])
+
+  @@index([status])
+  @@index([driverId])
+  @@map("deliveries")
+}
+
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  type      String
+  title     String
+  body      String
+  data      Json?
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+// remembers the answer to a request sent with an Idempotency-Key header,
+// so a retried "place order" (bad network, double tap) never makes two orders
+model IdempotencyKey {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  key         String
+  requestHash String   @map("request_hash")
+  statusCode  Int      @map("status_code")
+  response    Json
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, key])
+  @@index([createdAt])
+  @@map("idempotency_keys")
+}
+
+// events whose handler kept failing after all retries land here,
+// so nothing is lost silently and an admin can look at them
+model DeadLetter {
+  id         String    @id @default(uuid())
+  event      String
+  handler    String
+  payload    Json
+  error      String
+  attempts   Int
+  createdAt  DateTime  @default(now()) @map("created_at")
+  resolvedAt DateTime? @map("resolved_at")
+
+  @@index([resolvedAt, createdAt])
+  @@map("dead_letters")
 }

@@ -1,13 +1,10 @@
 import { Router } from "express";
-import { prisma } from "../../shared/database/prisma.js";
+import { categoryService } from "./category.service.js";
 
 export const categoryRoutes = Router();
 
 // GET /api/categories  ->  list active categories
 categoryRoutes.get("/", async (req, res) => {
-  const categories = await prisma.category.findMany({
-    where: { isActive: true },
-    orderBy: { sortOrder: "asc" },
-  });
+  const categories = await categoryService.listActive();
   res.json({ categories });
 });

@@ -1,0 +1,26 @@
+# keeps dependencies up to date with small, reviewable pull requests (avoids "dependency hell")
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+  - package-ecosystem: npm
+    directory: /admin
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+  - package-ecosystem: npm
+    directory: /mobile
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+    # Expo upgrades must be done together with "npx expo install --fix", never one by one
+    ignore:
+      - dependency-name: "expo*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-native*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "react"
+      - dependency-name: "react-dom"
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: monthly }

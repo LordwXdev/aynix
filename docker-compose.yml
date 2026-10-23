@@ -1,0 +1,96 @@
+# run all of Aynix with one command:  docker compose up -d --build
+# then open http://localhost:8080 (admin panel) — the API is at http://localhost:8080/api
+#
+# needs a .env file next to this one (see .env.example)
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: aynix
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aynix}
+      POSTGRES_DB: aynix
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aynix -d aynix"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # shares live updates and rate limits between API servers
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # runs the database migrations once, then stops
+  migrate:
+    image: ${API_IMAGE:-aynix-api}-migrate:${API_TAG:-local}
+    build: { context: ., target: migrate }
+    environment:
+      DATABASE_URL: postgresql://aynix:${POSTGRES_PASSWORD:-aynix}@db:5432/aynix?schema=public
+    depends_on:
+      db: { condition: service_healthy }
+
+  # set API_TAG to a CI image tag (sha-abc1234 or v1.2.0) to deploy or roll back to that version
+  api:
+    image: ${API_IMAGE:-aynix-api}:${API_TAG:-local}
+    build: { context: ., target: runtime }
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://aynix:${POSTGRES_PASSWORD:-aynix}@db:5432/aynix?schema=public
+      NODE_ENV: production
+      PORT: 3000
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    # to run 3 copies behind the gateway: docker compose up -d --scale api=3
+    deploy:
+      resources:
+        limits: { memory: 512m }
+
+  gateway:
+    image: ${GATEWAY_IMAGE:-aynix-gateway}:${API_TAG:-local}
+    build: ./admin
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      api: { condition: service_healthy }
+
+  # first admin + categories:  docker compose run --rm seed
+  seed:
+    build: { context: ., target: migrate }
+    profiles: ["tools"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://aynix:${POSTGRES_PASSWORD:-aynix}@db:5432/aynix?schema=public
+    command: ["npx", "tsx", "prisma/seed.ts"]
+    depends_on:
+      db: { condition: service_healthy }
+
+  # backups:  docker compose run --rm backup
+  # writes a compressed copy of the database to ./backups
+  backup:
+    image: postgres:16-alpine
+    profiles: ["tools"]
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-aynix}
+    volumes:
+      - ./backups:/backups
+    entrypoint: ["sh", "-c", "pg_dump -h db -U aynix -d aynix -Fc -f /backups/aynix-$$(date +%Y%m%d-%H%M%S).dump && ls -lh /backups | tail -5"]
+    depends_on:
+      db: { condition: service_healthy }
+
+volumes:
+  db-data:
