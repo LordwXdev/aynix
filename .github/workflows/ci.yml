@@ -116,7 +116,7 @@ jobs:
           tag="sha-${GITHUB_SHA::7}"
           [[ "$GITHUB_REF" == refs/tags/v* ]] && tag="${GITHUB_REF#refs/tags/}"
           echo "tag=$tag" >> $GITHUB_OUTPUT
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: .
           target: runtime
@@ -124,14 +124,14 @@ jobs:
           tags: ${{ steps.meta.outputs.api }}:${{ steps.meta.outputs.tag }},${{ steps.meta.outputs.api }}:latest
           cache-from: type=gha,scope=api
           cache-to: type=gha,mode=max,scope=api
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: .
           target: migrate
           push: true
           tags: ${{ steps.meta.outputs.api }}-migrate:${{ steps.meta.outputs.tag }}
           cache-from: type=gha,scope=api
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: admin
           push: true
