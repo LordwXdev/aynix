@@ -127,58 +127,58 @@ const createApp = () => {
   app.use(notFoundHandler);
   app.use(errorHandler);
   return app;
-  };
+};
 
-  // --- event system: modules react to each other's events ---
-  registerDeliveryListeners();
-  registerNotificationListeners();
-  registerRealtimeListeners();
-  registerBusinessMetrics();
+// --- event system: modules react to each other's events ---
+registerDeliveryListeners();
+registerNotificationListeners();
+registerRealtimeListeners();
+registerBusinessMetrics();
 
-  // --- start: one HTTP server shared by the API and the live socket ---
-  const server = createServer();
-  // drop clients that are too slow to send their request
-  server.requestTimeout = env.requestTimeoutMs + 5_000;
-  server.headersTimeout = 20_000;
-  server.keepAliveTimeout = 65_000; // a bit longer than the load balancer's
-  let io: ReturnType<typeof startRealtime>;
-  let stopJobs = () => {};
+// --- start: one HTTP server shared by the API and the live socket ---
+const server = createServer();
+// drop clients that are too slow to send their request
+server.requestTimeout = env.requestTimeoutMs + 5_000;
+server.headersTimeout = 20_000;
+server.keepAliveTimeout = 65_000; // a bit longer than the load balancer's
+let io: ReturnType<typeof startRealtime>;
+let stopJobs = () => {};
 
-  const start = async () => {
-    await connectRedis(); // only if REDIS_URL is set
-    server.on("request", createApp());
-    io = startRealtime(server);
-    stopJobs = startJobs();
-    server.listen(env.port, () => {
-      logger.info({ port: env.port, version: env.version }, `Server running on http://localhost:${env.port}`);
-    });
-  };
-  start().catch((err) => {
-    logger.fatal({ err }, "could not start");
-    process.exit(1);
+const start = async () => {
+  await connectRedis(); // only if REDIS_URL is set
+  server.on("request", createApp());
+  io = startRealtime(server);
+  stopJobs = startJobs();
+  server.listen(env.port, () => {
+    logger.info({ port: env.port, version: env.version }, `Server running on http://localhost:${env.port}`);
   });
+};
+start().catch((err) => {
+  logger.fatal({ err }, "could not start");
+  process.exit(1);
+});
 
-  // graceful shutdown: stop taking new work, finish what is running, then exit
-  // (this is what makes rolling and blue-green deployments lose no requests)
-  let stopping = false;
-  const shutdown = (signal: string) => {
-    if (stopping) return;
-    stopping = true;
-    logger.info({ signal }, "shutting down");
-    markShuttingDown(); // readiness now says "not ready", so the load balancer stops sending traffic
-    stopJobs();
-    io?.close();
-    server.close(() => {
-      Promise.allSettled([prisma.$disconnect(), closeRedis()]).finally(() => process.exit(0));
-    });
-    setTimeout(() => process.exit(1), 15_000).unref();
-  };
-  process.on("SIGTERM", () => shutdown("SIGTERM"));
-  process.on("SIGINT", () => shutdown("SIGINT"));
-
-  // log crashes in one clear line before exiting, so they show up in monitoring
-  process.on("unhandledRejection", (err) => logger.error({ err }, "unhandled promise rejection"));
-  process.on("uncaughtException", (err) => {
-    logger.fatal({ err }, "uncaught exception");
-    process.exit(1);
+// graceful shutdown: stop taking new work, finish what is running, then exit
+// (this is what makes rolling and blue-green deployments lose no requests)
+let stopping = false;
+const shutdown = (signal: string) => {
+  if (stopping) return;
+  stopping = true;
+  logger.info({ signal }, "shutting down");
+  markShuttingDown(); // readiness now says "not ready", so the load balancer stops sending traffic
+  stopJobs();
+  io?.close();
+  server.close(() => {
+    Promise.allSettled([prisma.$disconnect(), closeRedis()]).finally(() => process.exit(0));
   });
+  setTimeout(() => process.exit(1), 15_000).unref();
+};
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
+
+// log crashes in one clear line before exiting, so they show up in monitoring
+process.on("unhandledRejection", (err) => logger.error({ err }, "unhandled promise rejection"));
+process.on("uncaughtException", (err) => {
+  logger.fatal({ err }, "uncaught exception");
+  process.exit(1);
+});
